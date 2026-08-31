@@ -87,8 +87,53 @@ async def test_create_task_comment_basic():
     call_path = mock_post.call_args.args[0]
     assert "task_abc" in call_path
     body = mock_post.call_args.kwargs.get("json_body") or mock_post.call_args.args[1]
-    assert body["comment_text"] == "Looks good!"
+    assert body["comment"] == [
+        {"text": "🥑 "},
+        {"text": "Pip:", "attributes": {"bold": True}},
+        {"text": " "},
+        {"text": "Looks good!"},
+    ]
+    assert "comment_text" not in body
     assert body["notify_all"] is False
+
+
+@pytest.mark.asyncio
+async def test_create_task_comment_rich_text_prefixes_without_losing_body_nodes():
+    mcp = _build_mcp()
+    mock_post = AsyncMock(return_value=SAMPLE_COMMENT)
+    with patch("tools.comments.api_client.post", new=mock_post):
+        await _call(mcp, "create_task_comment", {
+            "task_id": "task_abc",
+            "comment_nodes": '[{"text":"Please "},{"text":"review","attributes":{"bold":true}}]',
+        })
+
+    body = mock_post.call_args.kwargs.get("json_body") or mock_post.call_args.args[1]
+    assert body["comment"] == [
+        {"text": "🥑 "},
+        {"text": "Pip:", "attributes": {"bold": True}},
+        {"text": " "},
+        {"text": "Please "},
+        {"text": "review", "attributes": {"bold": True}},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_create_task_comment_does_not_double_prefix():
+    mcp = _build_mcp()
+    mock_post = AsyncMock(return_value=SAMPLE_COMMENT)
+    with patch("tools.comments.api_client.post", new=mock_post):
+        await _call(mcp, "create_task_comment", {
+            "task_id": "task_abc",
+            "comment_nodes": '[{"text":"🥑 "},{"text":"Pip:","attributes":{"bold":true}},{"text":" "},{"text":"Already done"}]',
+        })
+
+    body = mock_post.call_args.kwargs.get("json_body") or mock_post.call_args.args[1]
+    assert body["comment"] == [
+        {"text": "🥑 "},
+        {"text": "Pip:", "attributes": {"bold": True}},
+        {"text": " "},
+        {"text": "Already done"},
+    ]
 
 
 @pytest.mark.asyncio

@@ -19,6 +19,37 @@ _COMMENT_NODES_DESC = (
 )
 
 
+PIP_COMMENT_PREFIX_PLAIN = "🥑 Pip: "
+PIP_COMMENT_PREFIX_NODES = [
+    {"text": "🥑 "},
+    {"text": "Pip:", "attributes": {"bold": True}},
+    {"text": " "},
+]
+
+
+def _node_text(node: dict) -> str:
+    """Return visible text for simple ClickUp comment nodes."""
+    if "text" in node:
+        return str(node.get("text") or "")
+    if node.get("type") == "tag":
+        user = node.get("user", {})
+        return f"@{user.get('username') or user.get('email') or user.get('id') or ''}"
+    return ""
+
+
+def _has_pip_prefix(nodes: list[dict]) -> bool:
+    """Detect Pip's visible prefix to avoid double-prefixing retries."""
+    visible = "".join(_node_text(node) for node in nodes[:4])
+    return visible.startswith(PIP_COMMENT_PREFIX_PLAIN)
+
+
+def _with_pip_comment_prefix(nodes: list[dict]) -> list[dict]:
+    """Prefix task comments with avocado + bold Pip label, idempotently."""
+    if _has_pip_prefix(nodes):
+        return nodes
+    return [dict(node) for node in PIP_COMMENT_PREFIX_NODES] + nodes
+
+
 async def _parse_comment_nodes(nodes_json: str) -> list[dict]:
     """Parse a JSON string of comment nodes, resolving @mention names to user IDs."""
     from cache import cache
@@ -82,11 +113,13 @@ def register_comment_tools(mcp: FastMCP) -> None:
         """
         try:
             from cache import cache
-            body = {"notify_all": notify_all}
+            body: dict[str, object] = {"notify_all": notify_all}
             if comment_nodes:
-                body["comment"] = await _parse_comment_nodes(comment_nodes)
+                body["comment"] = _with_pip_comment_prefix(
+                    await _parse_comment_nodes(comment_nodes)
+                )
             else:
-                body["comment_text"] = comment_text
+                body["comment"] = _with_pip_comment_prefix([{"text": comment_text}])
             if assignee:
                 member = await cache.resolve_member(assignee)
                 if member:
@@ -132,7 +165,7 @@ def register_comment_tools(mcp: FastMCP) -> None:
         """
         try:
             from cache import cache
-            body = {"notify_all": notify_all}
+            body: dict[str, object] = {"notify_all": notify_all}
             if comment_nodes:
                 body["comment"] = await _parse_comment_nodes(comment_nodes)
             else:
@@ -176,7 +209,7 @@ def register_comment_tools(mcp: FastMCP) -> None:
         """
         try:
             from cache import cache
-            body = {"notify_all": notify_all}
+            body: dict[str, object] = {"notify_all": notify_all}
             if comment_nodes:
                 body["comment"] = await _parse_comment_nodes(comment_nodes)
             else:
